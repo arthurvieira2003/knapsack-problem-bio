@@ -54,12 +54,44 @@ class AntColonyOptimization:
         # Melhor solução global
         self.best_solution = None
         self.best_fitness = 0
+        
+        # Para otimização
+        if self.n_items > 100:
+            self._pre_calculate_probabilities()
+            
+    def _pre_calculate_probabilities(self):
+        """Pré-calcula e ordena itens por valor/peso para otimizar construção de soluções"""
+        # Criamos uma lista de índices ordenados por valor/peso
+        self.sorted_items = sorted(
+            range(self.n_items), 
+            key=lambda i: self.value_per_weight[i], 
+            reverse=True
+        )
     
     def generate_solution(self, ant_id: int) -> List[int]:
         """Gera uma solução para uma formiga"""
         solution = [0] * self.n_items
         remaining_capacity = self.capacity
         
+        # Versão otimizada para conjuntos grandes
+        if self.n_items > 100:
+            # Usa a lista pré-ordenada
+            for item_idx in self.sorted_items:
+                # Verificar se cabe na mochila
+                if self.weights[item_idx] <= remaining_capacity:
+                    # Probabilidade baseada em feromônio e valor/peso
+                    tau = self.pheromone[item_idx] ** self.alpha
+                    eta = self.value_per_weight[item_idx] ** self.beta
+                    probability = tau * eta
+                    
+                    # Decisão exploração vs explotação
+                    if random.random() < self.q0 or probability > 0.5:  # Favorece escolha determinística
+                        solution[item_idx] = 1
+                        remaining_capacity -= self.weights[item_idx]
+                        
+            return solution
+        
+        # Versão original para conjuntos pequenos e médios
         # Lista de itens ainda não considerados
         available_items = list(range(self.n_items))
         
@@ -153,8 +185,16 @@ class AntColonyOptimization:
         """Executa o algoritmo ACO e retorna a melhor solução encontrada"""
         start_time = time.time()
         
+        # Ajustes para conjuntos grandes
+        if self.n_items > 500:
+            print("Usando configurações otimizadas para conjuntos grandes...")
+            # Reduz o número de iterações para conjuntos muito grandes
+            actual_iterations = min(self.max_iterations, 30)
+        else:
+            actual_iterations = self.max_iterations
+            
         # Iterações principais
-        for iteration in range(self.max_iterations):
+        for iteration in range(actual_iterations):
             solutions = []
             fitness_values = []
             
@@ -178,6 +218,15 @@ class AntColonyOptimization:
             self.best_fitness_history.append(self.best_fitness)
             avg_fitness = sum(fitness_values) / len(fitness_values) if fitness_values else 0
             self.avg_fitness_history.append(avg_fitness)
+            
+            # Early stopping para conjuntos grandes
+            if self.n_items > 500 and iteration > 10 and iteration % 5 == 0:
+                # Verifica se a melhoria nos últimos 5 passos é menor que 0.5%
+                if len(self.best_fitness_history) > 5:
+                    improvement = (self.best_fitness_history[-1] - self.best_fitness_history[-6]) / (self.best_fitness_history[-6] + 1e-10)
+                    if improvement < 0.005:
+                        print(f"Convergência detectada após {iteration} iterações. Interrompendo.")
+                        break
         
         # Calcula estatísticas finais
         _, best_value, best_weight = self.fitness_function(self.best_solution)

@@ -78,15 +78,26 @@ def run_comparison(weights, values, capacity, dataset_name=""):
     # Executa ACO
     print(f"Executando ACO para {dataset_name}...")
     start_time = time.time()
+    
+    # Configurações ajustadas para conjuntos grandes
+    if n_items > 500:
+        aco_iterations = 30  # Reduz número de iterações
+        aco_ants = min(50, population_size // 2)  # Reduz número de formigas
+        aco_rho = 0.1  # Menor taxa de evaporação para mais estabilidade
+    else:
+        aco_iterations = iterations
+        aco_ants = population_size
+        aco_rho = 0.5 if n_items <= 100 else 0.2
+    
     aco = AntColonyOptimization(
         weights=weights,
         values=values,
         capacity=capacity,
-        num_ants=population_size,
-        max_iterations=iterations,
+        num_ants=aco_ants,
+        max_iterations=aco_iterations,
         alpha=1.0,
         beta=2.0 if n_items <= 100 else 3.0,
-        rho=0.5 if n_items <= 100 else 0.2,
+        rho=aco_rho,
         q0=0.9
     )
     aco_result = aco.find_best_solution()
@@ -113,7 +124,18 @@ def run_comparison(weights, values, capacity, dataset_name=""):
     plt.figure(figsize=(12, 7))
     plt.plot(results["GA"]["best_history"], 'r-', label='Algoritmo Genético')
     plt.plot(results["PSO"]["best_history"], 'g-', label='PSO')
-    plt.plot(results["ACO"]["best_history"], 'b-', label='ACO')
+    
+    # Ajusta tamanho do histórico do ACO para corresponder ao GA e PSO para gráfico
+    aco_history = results["ACO"]["best_history"]
+    if len(aco_history) != len(results["GA"]["best_history"]):
+        # Interpola para o mesmo número de pontos
+        x_original = np.linspace(0, 1, len(aco_history))
+        x_new = np.linspace(0, 1, len(results["GA"]["best_history"]))
+        aco_history_interp = np.interp(x_new, x_original, aco_history)
+        plt.plot(aco_history_interp, 'b-', label='ACO')
+    else:
+        plt.plot(aco_history, 'b-', label='ACO')
+    
     plt.title(f'Comparação da Evolução da Aptidão - {dataset_name}')
     plt.xlabel('Iteração')
     plt.ylabel('Melhor Aptidão')
